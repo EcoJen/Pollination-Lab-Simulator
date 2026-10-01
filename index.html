@@ -1,0 +1,165 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>SE Michigan Pollination Ecology Simulator</title>
+<style>
+:root{--bg:#f5f3ea;--card:#fffdf7;--ink:#25352b;--muted:#68756d;--line:#ccd4cc;--accent:#386a4d;--soft:#e5eee7}
+*{box-sizing:border-box} body{margin:0;font-family:Arial,Helvetica,sans-serif;background:var(--bg);color:var(--ink)}
+main{max-width:1000px;margin:auto;padding:24px}.top{display:flex;justify-content:space-between;gap:16px;align-items:flex-start;flex-wrap:wrap}
+h1{margin:.1em 0;font-size:clamp(1.6rem,4vw,2.5rem)} h2{margin-top:0}.sub{color:var(--muted);max-width:780px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:18px;margin:16px 0}
+.grid{display:grid;grid-template-columns:2fr 1fr;gap:16px}@media(max-width:720px){.grid{grid-template-columns:1fr}}
+button,select{font:inherit;min-height:44px;border-radius:9px;border:1px solid var(--line);padding:9px 12px;background:white;color:var(--ink)}
+button{cursor:pointer;font-weight:700}button.primary{background:var(--accent);color:white;border-color:var(--accent)}button:disabled{opacity:.5;cursor:not-allowed}
+.controls{display:flex;gap:9px;flex-wrap:wrap;align-items:end}.field{display:flex;flex-direction:column;gap:5px;font-size:.9rem;font-weight:bold}
+#plot{position:relative;min-height:430px;border-radius:15px;overflow:hidden;border:1px solid var(--line);background:linear-gradient(#dce9ed 0 48%,#a9c28f 48% 100%)}
+.flower{position:absolute;font-size:35px;transform:translate(-50%,-50%);filter:saturate(.9)}.visitor{position:absolute;z-index:5;font-size:29px;animation:visit 4.2s ease-in-out forwards}
+@keyframes visit{0%{opacity:0;transform:translate(-25px,-20px) scale(.7)}18%{opacity:1}55%{transform:translate(10px,20px) scale(1.15)}82%{opacity:1}100%{opacity:0;transform:translate(60px,-35px) scale(.8)}}
+.clock{font:700 2rem ui-monospace,monospace}.period{font-weight:bold}.notice{background:var(--soft);border-radius:10px;padding:10px 12px}
+.key{display:grid;grid-template-columns:1fr 1fr;gap:8px}.key div{padding:7px;border-bottom:1px solid var(--line)}
+.overlay{position:absolute;inset:0;background:#ffffffdd;display:none;align-items:center;justify-content:center;text-align:center;padding:25px;z-index:10}.overlay.show{display:flex}.overlay>div{max-width:430px}
+.hidden{display:none!important}.footer{font-size:.82rem;color:var(--muted);margin-top:20px}
+</style>
+</head>
+<body><main>
+<div class="top">
+  <div>
+    <h1>Pollination Ecology Simulator</h1>
+    <div class="sub">Southeast Michigan simulated field observation. Observe the marked flower patch for six 10-minute observation periods (60 minutes total) and record each flower visit on your laboratory datasheet.</div>
+  </div>
+  <div class="notice"><b>Observation:</b> tally what you actually see. Each 10-minute period is a separate replicate.</div>
+</div>
+
+<section id="setup" class="card">
+<h2>Choose your assigned group</h2>
+<div class="controls">
+<label class="field">Assigned group
+<select id="group">
+<option value="A">Group A — Wild bergamot</option>
+<option value="B">Group B — Swamp milkweed</option>
+<option value="C">Group C — New England aster</option>
+<option value="D">Group D — Canada goldenrod</option>
+</select></label>
+<button id="load" class="primary">Load assigned simulation</button>
+</div>
+<p class="footer">Each group observes a different flower and pollinator community. Visitation varies naturally among the six observation periods.</p>
+</section>
+
+<section id="sim" class="hidden">
+<div class="card">
+<div class="top">
+<div>
+<div class="period">Group <span id="gName"></span> · Observation period <span id="pNum">1</span> of 6</div>
+<h2 id="plantName"></h2>
+<div id="plantDesc" class="sub"></div>
+</div>
+<div><div class="sub">Elapsed observation time</div><div id="clock" class="clock">00:00</div></div>
+</div>
+</div>
+
+<div class="grid">
+<div>
+<div id="plot" aria-label="Simulated flower observation plot">
+  <div id="overlay" class="overlay"><div><h2 id="overlayTitle">Observation period complete</h2><p>Finish recording your tallies before continuing.</p></div></div>
+</div>
+<div class="controls" style="margin-top:12px">
+<button id="start" class="primary">Start 10-minute observation</button>
+<button id="pause" disabled>Pause</button>
+<button id="next" class="hidden primary">Begin next observation period</button>
+<button id="restart">Restart group</button>
+</div>
+<p id="status" class="sub" aria-live="polite">Make your pollination-syndrome prediction before starting.</p>
+</div>
+
+<aside class="card" style="margin:0">
+<h2>Field key</h2>
+<p class="sub">Count a visit whenever a visitor lands on or contacts a flower. The same individual may visit multiple flowers.</p>
+<div class="key">
+<div>🐝 Honeybee</div><div>🐝 Bumblebee*</div><div>• Small bee</div><div>🪰 Fly</div>
+<div>🦋 Butterfly</div><div>🪲 Beetle</div><div>◆ Other</div>
+</div>
+<p class="footer">*Bumblebees are shown noticeably larger than honeybees.</p>
+<hr>
+<b>Number of flowers observed: <span id="nFlowers"></span></b>
+</aside>
+</div>
+</section>
+
+<div class="footer">Teaching simulation. Pollinator visitation patterns are designed to provide realistic ecological variation for a pollination-syndrome and visitation-rate exercise; they are not measured field-census data.</div>
+</main>
+
+<script>
+(()=>{
+const plants={
+A:{name:"Wild bergamot (Monarda fistulosa)",desc:"Lavender, tubular, bilaterally symmetric flowers. Consider floral shape, access to nectar, and landing behavior when developing your hypothesis.",n:12,rate:[.20,.78,.30,.12,.34,.045,.055],flower:"🌸"},
+B:{name:"Swamp milkweed (Asclepias incarnata)",desc:"Pink flower clusters with abundant nectar and specialized floral structures. Several kinds of relatively large insects may visit.",n:12,rate:[.27,.62,.29,.20,.43,.10,.06],flower:"🌺"},
+C:{name:"New England aster (Symphyotrichum novae-angliae)",desc:"Purple ray flowers surrounding yellow disk florets. Rewards are relatively accessible to several insect groups.",n:14,rate:[.27,.55,.74,.35,.18,.055,.06],flower:"🌼"},
+D:{name:"Canada goldenrod (Solidago canadensis)",desc:"Dense yellow inflorescences contain many small accessible florets and can attract a broad assemblage of flower visitors.",n:18,rate:[.32,.43,.68,.60,.15,.18,.075],flower:"🌻"}
+};
+const icons=["🐝","🐝","•","🪰","🦋","🪲","◆"];
+let st={g:null,p:1,t:0,run:false,last:0,events:[],seed:Date.now()>>>0,raf:0};
+const $=id=>document.getElementById(id);
+function rnd(){st.seed=(1664525*st.seed+1013904223)>>>0;return st.seed/4294967296}
+function pois(l){let L=Math.exp(-l),k=0,p=1;do{k++;p*=rnd()}while(p>L);return k-1}
+function draw(){
+ const plot=$("plot");[...plot.querySelectorAll(".flower,.visitor")].forEach(x=>x.remove());
+ let p=plants[st.g];
+ for(let i=0;i<p.n;i++){
+   let f=document.createElement("div");f.className="flower";f.textContent=p.flower;
+   f.style.left=(8+(i%6)*16+rnd()*3)+"%";f.style.top=(54+Math.floor(i/6)*16+rnd()*5)+"%";plot.appendChild(f);
+ }
+}
+function build(){
+ let p=plants[st.g],weather=.88+rnd()*.32;st.events=[];
+ p.rate.forEach((r,i)=>{let n=pois(r*10*weather);for(let j=0;j<n;j++)st.events.push({t:rnd()*600,i,seen:false})});
+ st.events.sort((a,b)=>a.t-b.t);
+}
+function spawn(i){
+ let v=document.createElement("div");v.className="visitor";v.textContent=icons[i];
+ v.style.fontSize=(i===1?"40px":i===2?"24px":"29px");
+ v.style.left=(4+rnd()*87)+"%";v.style.top=(25+rnd()*48)+"%";$("plot").appendChild(v);
+ setTimeout(()=>v.remove(),4300);
+}
+function clock(){
+ let s=Math.min(600,st.t);$("clock").textContent=String(Math.floor(s/60)).padStart(2,"0")+":"+String(Math.floor(s%60)).padStart(2,"0");
+}
+function tick(ts){
+ if(!st.run)return;if(!st.last)st.last=ts;
+ st.t+=Math.min(.15,(ts-st.last)/1000);st.last=ts;
+ st.events.forEach(e=>{if(!e.seen&&e.t<=st.t){e.seen=true;spawn(e.i)}});
+ clock();if(st.t>=600){finish();return}st.raf=requestAnimationFrame(tick);
+}
+function start(){
+ if(!st.events.length)build();st.run=true;st.last=0;$("start").disabled=true;$("pause").disabled=false;
+ $("status").textContent="Observation running — tally each flower visit.";$("overlay").classList.remove("show");
+ st.raf=requestAnimationFrame(tick);
+}
+function pause(){
+ st.run=false;cancelAnimationFrame(st.raf);$("start").disabled=false;$("start").textContent="Resume";
+ $("pause").disabled=true;$("status").textContent="Paused at "+$("clock").textContent+".";
+}
+function finish(){
+ st.run=false;st.t=600;clock();$("pause").disabled=true;$("start").classList.add("hidden");$("overlay").classList.add("show");
+ if(st.p<6){$("next").classList.remove("hidden");$("status").textContent="Observation period "+st.p+" complete. Finish your datasheet before continuing."}
+ else{$("overlayTitle").textContent="All six observation periods complete";$("status").textContent="60 minutes of observation complete. Calculate visits/flower/period and continue with your analysis."}
+}
+function next(){
+ st.p++;st.t=0;st.events=[];$("pNum").textContent=st.p;$("clock").textContent="00:00";$("next").classList.add("hidden");
+ $("start").classList.remove("hidden");$("start").disabled=false;$("start").textContent="Start 10-minute observation";
+ $("overlay").classList.remove("show");build();draw();$("status").textContent="Observation period "+st.p+" ready.";
+}
+function load(){
+ cancelAnimationFrame(st.raf);
+ st={g:$("group").value,p:1,t:0,run:false,last:0,events:[],seed:Date.now()>>>0,raf:0};
+ let p=plants[st.g];$("sim").classList.remove("hidden");$("gName").textContent=st.g;$("pNum").textContent=1;
+ $("plantName").textContent=p.name;$("plantDesc").textContent=p.desc;$("nFlowers").textContent=p.n;$("clock").textContent="00:00";
+ $("start").classList.remove("hidden");$("start").disabled=false;$("start").textContent="Start 10-minute observation";
+ $("pause").disabled=true;$("next").classList.add("hidden");$("overlay").classList.remove("show");$("overlayTitle").textContent="Observation period complete";
+ $("status").textContent="Make your pollination-syndrome prediction before starting.";draw();build();
+}
+$("load").onclick=load;$("start").onclick=start;$("pause").onclick=pause;$("next").onclick=next;$("restart").onclick=load;
+})();
+</script>
+</body></html>
